@@ -7,4 +7,12 @@ Program {
 	},
 }
 
-Default "TestIffParser"
+Program {
+	Name = "TestIlbmParser",
+	Sources = {
+		"parseIff.c",
+		"parseIlbm.c",
+	},
+}
+
+Default "TestIlbmParser"
