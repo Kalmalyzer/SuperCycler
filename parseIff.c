@@ -1,25 +1,10 @@
 
+#include "parseIff.h"
+
 #include <stdio.h>
 #include <stdlib.h>
-#include "Types.h"
 
 #define DEBUG_IFF_PARSER
-
-typedef bool (*IffChunkHandlerFunc)(void);
-
-typedef void (*IffErrorFunc)(const char* message);
-
-typedef struct
-{
-	uint32_t id;
-	IffChunkHandlerFunc handlerFunc;
-} IffChunkHandler;
-
-typedef struct
-{
-	IffErrorFunc errorFunc;
-	IffChunkHandler* chunkHandlers;
-} IffParseRules;
 
 typedef struct
 {
@@ -41,18 +26,6 @@ typedef struct
 	uint32_t id;
 	uint32_t size;
 } IffChunkHeader;
-
-enum
-{
-	ID_FORM = 'FORM',
-	ID_ILBM = 'ILBM',
-	ID_BMHD = 'BMHD',
-	ID_BODY = 'BODY',
-	ID_CMAP = 'CMAP',
-	ID_CAMG = 'CAMG',
-	ID_CRNG = 'CRNG',
-};
-
 
 bool validateIffHeader(const IffHeader* iffHeader)
 {
@@ -266,40 +239,4 @@ bool parseIff(const char* fileName, const IffParseRules* rules)
 	cleanup(&parseContext);
 	
 	return result;
-}
-
-void parseErrorCallback(const char* message)
-{
-	printf("Error: %s\n", message);
-}
-
-
-bool handleBMHD(void)
-{
-	return true;
-}
-
-bool handleBODY(void)
-{
-	return true;
-}
-
-int main(int argc, char** argv)
-{
-	static IffChunkHandler chunkHandlers[] = {
-		{ ID_BMHD, handleBMHD },
-		{ ID_BODY, handleBODY },
-		{ 0, 0 },
-	};
-	static IffParseRules parseRules = { parseErrorCallback, chunkHandlers };
-
-	if (argc != 2)
-	{
-		printf("usage: parseiff <filename>\n");
-		return 0;
-	}
-	
-	parseIff(argv[1], &parseRules);
-	
-	return 0;
 }
