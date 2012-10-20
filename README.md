@@ -1,0 +1,1 @@
+SuperCycler displays IFF images with palette animations on AGA Amigas.
