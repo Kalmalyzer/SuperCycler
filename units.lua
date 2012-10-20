@@ -1,9 +1,9 @@
 
 Program {
-	Name = "SuperCycler",
+	Name = "TestIffParser",
 	Sources = {
 		"parseIff.c",
 	},
 }
 
-Default "SuperCycler"
+Default "TestIffParser"
