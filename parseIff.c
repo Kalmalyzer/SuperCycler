@@ -27,7 +27,7 @@ typedef struct
 	uint32_t size;
 } IffChunkHeader;
 
-bool validateIffHeader(const IffHeader* iffHeader)
+static bool validateIffHeader(const IffHeader* iffHeader)
 {
 	if (iffHeader->compositeType != ID_FORM)
 		return false;
@@ -39,13 +39,13 @@ bool validateIffHeader(const IffHeader* iffHeader)
 	return true;
 }
 
-void cleanup(IffParseContext* parseContext)
+static void cleanup(IffParseContext* parseContext)
 {
 	if (parseContext->fileHandle)
 		fclose(parseContext->fileHandle);
 }
 
-bool validateIffChunkHeader(const IffChunkHeader* chunkHeader, unsigned int compositeBytesLeft)
+static bool validateIffChunkHeader(const IffChunkHeader* chunkHeader, unsigned int compositeBytesLeft)
 {
 	if (chunkHeader->size > compositeBytesLeft)
 		return false;
@@ -53,7 +53,7 @@ bool validateIffChunkHeader(const IffChunkHeader* chunkHeader, unsigned int comp
 	return true;
 }
 
-bool readBytesFromStream(IffParseContext* parseContext, const IffParseRules* rules, void* buffer, size_t bytes)
+static bool readBytesFromStream(IffParseContext* parseContext, const IffParseRules* rules, void* buffer, size_t bytes)
 {
 	if (fread(buffer, bytes, 1, parseContext->fileHandle) != 1)
 	{
@@ -68,7 +68,7 @@ bool readBytesFromStream(IffParseContext* parseContext, const IffParseRules* rul
 	return true;
 }
 
-bool processChunkHeader(IffParseContext* parseContext, const IffParseRules* rules, IffChunkHeader* chunkHeader)
+static bool processChunkHeader(IffParseContext* parseContext, const IffParseRules* rules, IffChunkHeader* chunkHeader)
 {
 #ifdef DEBUG_IFF_PARSER
 	printf("DEBUG_IFF_PARSER: Reading IFF chunk header from file\n");
@@ -98,7 +98,7 @@ bool processChunkHeader(IffParseContext* parseContext, const IffParseRules* rule
 	return true;
 }
 
-bool processChunkData(IffParseContext* parseContext, const IffParseRules* rules, const IffChunkHeader* chunkHeader)
+static bool processChunkData(IffParseContext* parseContext, const IffParseRules* rules, const IffChunkHeader* chunkHeader)
 {
 	if (!(parseContext->chunkBuffer = malloc(chunkHeader->size)))
 	{
@@ -149,7 +149,7 @@ bool processChunkData(IffParseContext* parseContext, const IffParseRules* rules,
 	return true;
 }
 
-bool processChunkPad(IffParseContext* parseContext, const IffParseRules* rules, const IffChunkHeader* chunkHeader)
+static bool processChunkPad(IffParseContext* parseContext, const IffParseRules* rules, const IffChunkHeader* chunkHeader)
 {
 	if ((chunkHeader->size & 1) && parseContext->compositeBytesLeft)
 	{
@@ -165,7 +165,7 @@ bool processChunkPad(IffParseContext* parseContext, const IffParseRules* rules, 
 	return true;
 }
 
-bool processChunks(IffParseContext* parseContext, const IffParseRules* rules)
+static bool processChunks(IffParseContext* parseContext, const IffParseRules* rules)
 {
 	while (parseContext->compositeBytesLeft)
 	{
