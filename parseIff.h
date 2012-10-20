@@ -4,7 +4,7 @@
 
 #include "Types.h"
 
-typedef bool (*IffChunkHandlerFunc)(void);
+typedef bool (*IffChunkHandlerFunc)(void* buffer, unsigned int size);
 
 typedef void (*IffErrorFunc)(const char* message);
 

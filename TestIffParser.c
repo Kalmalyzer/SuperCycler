@@ -8,12 +8,12 @@ void parseErrorCallback(const char* message)
 	printf("Error: %s\n", message);
 }
 
-bool handleBMHD(void)
+bool handleBMHD(void* buffer, unsigned int size)
 {
 	return true;
 }
 
-bool handleBODY(void)
+bool handleBODY(void* buffer, unsigned int size)
 {
 	return true;
 }
