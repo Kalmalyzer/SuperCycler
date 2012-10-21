@@ -36,6 +36,17 @@ typedef struct {
 	uint16_t pageWidth, pageHeight;	/* source "page" size in pixels	*/
 	} BitMapHeader;
 
+	
+typedef struct {
+	uint16_t pad1;      /* reserved for future use; store 0 here    */
+	uint16_t rate;      /* color cycle rate                         */
+	uint16_t flags;     /* see below                                */
+	uint8_t  low, high; /* lower and upper color registers selected */
+	} CRange;
+
+#define RNG_ACTIVE  1
+#define RNG_REVERSE 2
+
 typedef enum
 {
 	PixelFormat_Unknown,
@@ -165,7 +176,7 @@ static bool handleBMHD(void* state_, void* buffer, unsigned int size)
 		default:
 			{
 				char buf[1024];
-				sprintf(buf, "Unknown compression type %u\n", header->compression);
+				sprintf(buf, "Unknown compression type %u", header->compression);
 				state->errorFunc(buf);
 				return false;
 			}
@@ -174,9 +185,17 @@ static bool handleBMHD(void* state_, void* buffer, unsigned int size)
 	state->hasMaskPlane = (header->masking == mskHasMask);
 
 #ifdef DEBUG_ILBM_PARSER
-	printf("DEBUG_ILBM_PARSER: Image dimensions: %ux%u pixels, %u bitplanes%s\n", ilbm->width, ilbm->height, ilbm->depth, (state->hasMaskPlane ? " (+ 1 mask bitplane)" : ""));
+	printf("DEBUG_ILBM_PARSER: Image dimensions: %ux%u pixels, %u bits per pixel%s\n", ilbm->width, ilbm->height, ilbm->depth, (state->hasMaskPlane ? " (+ 1 mask bitplane)" : ""));
 	printf("DEBUG_ILBM_PARSER: Image compression: %s\n", state->compression ? "RLE" : "None");
 #endif
+
+	if (ilbm->depth > MaxIlbmPlanes)
+	{
+		char buf[1024];
+		sprintf(buf, "Parser does not support more than %u bits per pixel", (uint) MaxIlbmPlanes);
+		state->errorFunc(buf);
+		return false;
+	}
 
 	return true;
 }
@@ -205,6 +224,53 @@ static bool handleCMAP(void* state_, void* buffer, unsigned int size)
 		source += 3;
 	}
 	
+	return true;
+}
+
+static bool handleCRNG(void* state_, void* buffer, unsigned int size)
+{
+	ParseIlbmState* state = (ParseIlbmState*) state_;
+	Ilbm* ilbm = state->ilbm;
+	
+	if (size != sizeof CRange)
+	{
+		char buf[1024];
+		sprintf(buf, "CRNG chunk must be %u bytes", (uint) sizeof CRange);
+		state->errorFunc(buf);
+		return false;
+	}
+
+
+	CRange* sourceRange = (CRange*) buffer;
+	
+	if (!(sourceRange->flags & RNG_ACTIVE))
+	{
+#ifdef DEBUG_ILBM_PARSER
+		printf("DEBUG_ILBM_PARSER: Ignoring inactive color range\n");
+#endif
+		return true;
+	}
+	
+	if (ilbm->numColorRanges == MaxIlbmColorRanges)
+	{
+		char buf[1024];
+		sprintf(buf, "Parser supports at most %u active color ranges in a file", (uint) MaxIlbmColorRanges);
+		state->errorFunc(buf);
+		return false;
+	}
+
+	IlbmColorRange* destRange = &ilbm->colorRanges[ilbm->numColorRanges];
+
+	destRange->low = (uint) sourceRange->low;
+	destRange->high = (uint) sourceRange->high;
+	destRange->rate = sourceRange->rate;
+	destRange->reverse = (sourceRange->flags & RNG_REVERSE) ? true : false;
+	
+#ifdef DEBUG_ILBM_PARSER
+	printf("DEBUG_ILBM_PARSER: Color range from %u to %u, rate %u%s\n", destRange->low, destRange->high, destRange->rate, destRange->reverse ? ", reverse" : "");
+#endif
+
+	ilbm->numColorRanges++;
 	return true;
 }
 
@@ -245,7 +311,7 @@ static bool handleBODY(void* state_, void* buffer, unsigned int size)
 	if (!(ilbm->planes[0].data = malloc(bytesToAllocate)))
 	{
 		char buf[1024];
-		sprintf(buf, "Unable to allocate %u bytes\n", bytesToAllocate);
+		sprintf(buf, "Unable to allocate %u bytes", bytesToAllocate);
 		state->errorFunc(buf);
 		return false;
 	}
@@ -263,7 +329,7 @@ static bool handleBODY(void* state_, void* buffer, unsigned int size)
 		if (!(state->pbmRowBuffer = malloc(rowBufferBytes)))
 		{
 			char buf[1024];
-			sprintf(buf, "Unable to allocate %u bytes\n", rowBufferBytes);
+			sprintf(buf, "Unable to allocate %u bytes", rowBufferBytes);
 			state->errorFunc(buf);
 			return false;
 		}
@@ -406,7 +472,7 @@ static bool handleBODY(void* state_, void* buffer, unsigned int size)
 			default:
 			{
 				char buf[1024];
-				sprintf(buf, "Unsupported pixelFormat %d\n", (int) state->pixelFormat);
+				sprintf(buf, "Unsupported pixelFormat %d", (int) state->pixelFormat);
 				state->errorFunc(buf);
 				return false;
 			}
@@ -449,6 +515,7 @@ Ilbm* parseIlbm(const char* fileName, IffErrorFunc errorFunc)
 		{ ID_PBM,  handlePBM },
 		{ ID_BMHD, handleBMHD },
 		{ ID_CMAP, handleCMAP },
+		{ ID_CRNG, handleCRNG },
 		{ ID_BODY, handleBODY },
 		{ 0, 0 },
 	};
