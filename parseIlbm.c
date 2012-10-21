@@ -166,6 +166,7 @@ static bool handleBMHD(void* state_, void* buffer, unsigned int size)
 	ilbm->width = header->w;
 	ilbm->height = header->h;
 	ilbm->depth = header->nPlanes;
+	ilbm->bytesPerRow = ((header->w + 15) / 16) * 2;
 
 	switch (header->compression)
 	{
@@ -278,7 +279,7 @@ static bool handleBODY(void* state_, void* buffer, unsigned int size)
 {
 	ParseIlbmState* state = (ParseIlbmState*) state_;
 	Ilbm* ilbm = state->ilbm;
-	uint bytesPerRow = ((ilbm->width + 15) / 16) * 2;
+	uint bytesPerRow = ilbm->bytesPerRow;
 	uint bytesPerPlane = bytesPerRow * ilbm->height;
 	uint bytesToAllocate = bytesPerPlane * ilbm->depth;
 

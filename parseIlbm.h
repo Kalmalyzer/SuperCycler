@@ -33,6 +33,7 @@ typedef struct
 	uint height;
 	uint depth;
 	IlbmPalette palette;
+	uint bytesPerRow;
 	IlbmPlane planes[MaxIlbmPlanes];
 	uint numColorRanges;
 	IlbmColorRange colorRanges[MaxIlbmColorRanges];
