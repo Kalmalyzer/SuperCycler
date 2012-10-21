@@ -192,6 +192,12 @@ static bool handleBODY(void* state_, void* buffer, unsigned int size)
 	uint bytesPerPlane = bytesPerRow * ilbm->height;
 	uint bytesToAllocate = bytesPerPlane * ilbm->depth;
 
+	if (!state->encounteredBMHD)
+	{
+		state->errorFunc("Unable to decode BODY before BMHD has been handled");
+		return false;
+	}
+	
 #ifdef DEBUG_ILBM_PARSER
 	printf("DEBUG_ILBM_PARSER: Allocating memory for %ux%ux%u planes\n", ilbm->width, ilbm->height, ilbm->depth);
 #endif
