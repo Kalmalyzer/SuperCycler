@@ -12,6 +12,7 @@ Program {
 	Sources = {
 		"parseIff.c",
 		"parseIlbm.c",
+		"TestIlbmParser.c",
 	},
 }
 

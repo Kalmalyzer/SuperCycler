@@ -1,4 +1,5 @@
 
+#include "parseIlbm.h"
 #include "parseIff.h"
 
 #include <stdio.h>
@@ -42,26 +43,6 @@ void parseErrorCallback(const char* message)
 
 typedef struct
 {
-	uint numColors;
-	uint32_t colors[256];
-} IlbmPalette;
-
-typedef struct
-{
-	void* data;
-} IlbmPlane;
-
-typedef struct 
-{
-	uint width;
-	uint height;
-	uint depth;
-	IlbmPalette palette;
-	IlbmPlane planes[8];
-} Ilbm;
-
-typedef struct
-{
 	Ilbm* ilbm;
 	bool encounteredBMHD;
 	uint compression;
@@ -71,14 +52,7 @@ typedef struct
 
 ParseIlbmState parseIlbmState;
 
-void freeIlbm(Ilbm* ilbm)
-{
-	if (ilbm->depth && ilbm->planes[0].data)
-		free(ilbm->planes[0].data);
-	free(ilbm);
-}
-
-uint decodeRLE(uint8_t* dest, uint8_t* src, uint destBytes)
+static uint decodeRLE(uint8_t* dest, uint8_t* src, uint destBytes)
 {
 	uint8_t* srcStart = src;
 	uint8_t* destEnd = dest + destBytes;
@@ -115,7 +89,7 @@ uint decodeRLE(uint8_t* dest, uint8_t* src, uint destBytes)
 	return (src - srcStart);
 }
 
-uint skipRLE(uint8_t* src, uint destBytes)
+static uint skipRLE(uint8_t* src, uint destBytes)
 {
 	uint8_t* srcStart = src;
 
@@ -145,7 +119,7 @@ uint skipRLE(uint8_t* src, uint destBytes)
 	return (src - srcStart);
 }
 
-bool handleBMHD(void* buffer, unsigned int size)
+static bool handleBMHD(void* buffer, unsigned int size)
 {
 	if (size != sizeof BitMapHeader)
 	{
@@ -185,7 +159,7 @@ bool handleBMHD(void* buffer, unsigned int size)
 	return true;
 }
 
-bool handleCMAP(void* buffer, unsigned int size)
+static bool handleCMAP(void* buffer, unsigned int size)
 {
 	Ilbm* ilbm = parseIlbmState.ilbm;
 	
@@ -211,7 +185,7 @@ bool handleCMAP(void* buffer, unsigned int size)
 	return true;
 }
 
-bool handleBODY(void* buffer, unsigned int size)
+static bool handleBODY(void* buffer, unsigned int size)
 {
 	Ilbm* ilbm = parseIlbmState.ilbm;
 	uint bytesPerRow = ((ilbm->width + 15) / 16) * 2;
@@ -303,7 +277,7 @@ bool handleBODY(void* buffer, unsigned int size)
 	return true;
 }
 
-void cleanup(void)
+static void cleanup(void)
 {
 	if (parseIlbmState.ilbm)
 	{
@@ -334,17 +308,9 @@ Ilbm* parseIlbm(const char* fileName)
 	return parseIlbmState.ilbm;
 }
 
-int main(int argc, char** argv)
+void freeIlbm(Ilbm* ilbm)
 {
-	if (argc != 2)
-	{
-		printf("usage: parseIlbm <filename>\n");
-		return 0;
-	}
-
-	parseIlbm(argv[1]);
-	
-	return 0;
-
-
+	if (ilbm->depth && ilbm->planes[0].data)
+		free(ilbm->planes[0].data);
+	free(ilbm);
 }
