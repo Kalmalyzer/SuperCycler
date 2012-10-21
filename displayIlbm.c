@@ -2,10 +2,13 @@
 #include "parseIlbm.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #include <proto/exec.h>
 #include <proto/graphics.h>
 #include <proto/intuition.h>
+
+#define DEBUG_DISPLAY_ILBM
 
 struct GfxBase* GfxBase = 0;
 struct IntuitionBase* IntuitionBase = 0;
@@ -20,7 +23,6 @@ static struct MsgPort* IDCMPMsgPort = 0;
 static struct MsgPort* OSMsgPort = 0;
 static struct Screen* OSScreen = 0;
 static struct Window* OSWindow = 0;
-
 
 void cleanup(void)
 {
@@ -99,17 +101,34 @@ void pollMessages(void)
 	}
 }
 
-void setPalette(void)
+void setPalette(uint numColors, uint32_t* colors)
 {
-	static uint32_t palette[1 + 256 * 3 + 1];
-	
-	palette[0] = 256;
-	for (uint i = 0; i < 256 * 3; i++)
-		palette[1 + i] = 0;
+	static uint32_t palette[1 + 256 * 3 + 1] = { 0 };
+
+	palette[0] = (numColors << 16) | 0;
+
+	for (uint i = 0; i < numColors; ++i)
+	{
+		uint32_t color = colors[i];
+		palette[1 + i * 3 + 2] = ((color >> 16) & 0xff) * 0x01010101;
+		palette[1 + i * 3 + 1] = ((color >> 8) & 0xff) * 0x01010101;
+		palette[1 + i * 3 + 0] = (color & 0xff) * 0x01010101;
+	}
 		
-	palette[1 + 256*3] = 0;
-	
-	LoadRGB32(&OSScreen->ViewPort, (ULONG*) palette);
+	palette[1 + numColors*3] = 0;
+
+ 	LoadRGB32(&OSScreen->ViewPort, (ULONG*) palette);
+}
+
+void copyImageToScreen(Ilbm* ilbm)
+{
+	for (uint plane = 0; plane < ilbm->depth; ++plane)
+		for (uint row = 0; row < ilbm->height; ++row)
+		{
+			void* source = (uint8_t*) ilbm->planes[plane].data + row * ilbm->bytesPerRow;
+			void* dest = OSScreen->RastPort.BitMap->Planes[plane] + row * OSScreen->RastPort.BitMap->BytesPerRow;
+			memcpy(dest, source, ilbm->bytesPerRow);
+		}
 }
 
 void displayImage(Ilbm* ilbm)
@@ -120,8 +139,7 @@ void displayImage(Ilbm* ilbm)
 		return;
 	}
 	
-	uint32_t modeID = BestModeID(BIDTAG_DIPFMustHave, DIPF_IS_DBUFFER,
-		BIDTAG_NominalWidth, ilbm->width,
+	uint32_t modeID = BestModeID(BIDTAG_NominalWidth, ilbm->width,
 		BIDTAG_NominalHeight, ilbm->height,
 		BIDTAG_Depth, ilbm->depth,
 		TAG_DONE);
@@ -132,6 +150,10 @@ void displayImage(Ilbm* ilbm)
 		return;
 	}
 
+#ifdef DEBUG_DISPLAY_ILBM
+	printf("modeID returned by BestModeID: 0x%08x\n", modeID);
+#endif
+	
 	if (!(OSScreen = OpenScreenTags(0,
 		SA_Width, ilbm->width,
 		SA_Height, ilbm->height,
@@ -145,7 +167,7 @@ void displayImage(Ilbm* ilbm)
 		printf("Unable to open screen\n");
 		return;
 	}
-	
+
 	if (!(OSWindow = OpenWindowTags(0,
 		WA_CustomScreen, OSScreen,
 		WA_Flags, WFLG_ACTIVATE | WFLG_BACKDROP | WFLG_BORDERLESS | WFLG_RMBTRAP,
@@ -160,14 +182,17 @@ void displayImage(Ilbm* ilbm)
 
 	ModifyIDCMP(OSWindow, IDCMP_VANILLAKEY);
 
+	
 	if (!(OSMsgPort = CreateMsgPort()))
 	{
 		printf("Unable to create msgport\n");
 		return;
 	}
 
-	setPalette();
-	
+	setPalette(ilbm->palette.numColors, ilbm->palette.colors);
+
+	copyImageToScreen(ilbm);
+
 	pollMessages();
 }
 
