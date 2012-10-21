@@ -81,9 +81,9 @@ void setPalette(uint numColors, uint32_t* colors)
 	for (uint i = 0; i < numColors; ++i)
 	{
 		uint32_t color = colors[i];
-		palette[1 + i * 3 + 2] = ((color >> 16) & 0xff) * 0x01010101;
+		palette[1 + i * 3 + 0] = ((color >> 16) & 0xff) * 0x01010101;
 		palette[1 + i * 3 + 1] = ((color >> 8) & 0xff) * 0x01010101;
-		palette[1 + i * 3 + 0] = (color & 0xff) * 0x01010101;
+		palette[1 + i * 3 + 2] = (color & 0xff) * 0x01010101;
 	}
 		
 	palette[1 + numColors*3] = 0;
