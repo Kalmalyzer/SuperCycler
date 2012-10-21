@@ -102,7 +102,7 @@ void animatePalette(Ilbm* ilbm, uint frame)
 		uint colorsInRange = range->high - range->low + 1;
 		uint scaledRate = (frame * range->rate) / (16384*50);
 		uint offset = scaledRate % colorsInRange;
-		if (range->reverse)
+		if (!range->reverse)
 			offset = (colorsInRange - offset) % colorsInRange;
 		
 		for (uint colorId = 0; colorId < colorsInRange; ++colorId)
