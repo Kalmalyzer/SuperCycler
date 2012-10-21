@@ -72,38 +72,9 @@ void cleanup(void)
 	IDCMPMsgPort = 0;
 }
 
-void pollMessages(void)
-{
-	bool exitFlag = false;
-	while (!exitFlag)
-	{
-		WaitTOF();
-		
-		struct IntuiMessage* msg;
-		
-		while ((msg = (struct IntuiMessage*) GetMsg(IDCMPMsgPort)) != 0)
-		{
-			switch (msg->Class)
-			{
-				
-				case IDCMP_VANILLAKEY:
-				{
-					uint key = msg->Code & ~IECODE_UP_PREFIX;
-					uint up = msg->Code & IECODE_UP_PREFIX;
-
-					if (key == 27)
-						exitFlag = true;
-				}
-			}
-
-			ReplyMsg((struct Message*) msg);
-		}
-	}
-}
-
 void setPalette(uint numColors, uint32_t* colors)
 {
-	static uint32_t palette[1 + 256 * 3 + 1] = { 0 };
+	static uint32_t palette[1 + 256 * 3 + 1];
 
 	palette[0] = (numColors << 16) | 0;
 
@@ -118,6 +89,76 @@ void setPalette(uint numColors, uint32_t* colors)
 	palette[1 + numColors*3] = 0;
 
  	LoadRGB32(&OSScreen->ViewPort, (ULONG*) palette);
+}
+void animatePalette(Ilbm* ilbm, uint frame)
+{
+	static uint32_t colors[256];
+
+	memcpy(colors, ilbm->palette.colors, ilbm->palette.numColors * sizeof uint32_t);
+
+	for (uint rangeId = 0; rangeId < ilbm->numColorRanges; ++rangeId)
+	{
+		IlbmColorRange* range = &ilbm->colorRanges[rangeId];
+		uint colorsInRange = range->high - range->low + 1;
+		uint scaledRate = (frame * range->rate) / (16384*50);
+		uint offset = scaledRate % colorsInRange;
+		if (range->reverse)
+			offset = (colorsInRange - offset) % colorsInRange;
+		
+		for (uint colorId = 0; colorId < colorsInRange; ++colorId)
+			colors[range->low + colorId] = ilbm->palette.colors[range->low + (colorId + offset) % colorsInRange];
+	}
+	
+	setPalette(ilbm->palette.numColors, colors);
+}
+
+typedef enum
+{
+	InputEvent_None,
+	InputEvent_Exit,
+} InputEvent;
+	
+
+InputEvent pollMessages(void)
+{
+	InputEvent event = InputEvent_None;
+
+	struct IntuiMessage* msg;
+
+	while ((msg = (struct IntuiMessage*) GetMsg(IDCMPMsgPort)) != 0)
+	{
+		switch (msg->Class)
+		{
+			
+			case IDCMP_VANILLAKEY:
+			{
+				uint key = msg->Code & ~IECODE_UP_PREFIX;
+
+				if (key == 27)
+					event = InputEvent_Exit;
+			}
+		}
+
+		ReplyMsg((struct Message*) msg);
+	}
+	
+	return event;
+}
+
+void displayLoop(Ilbm* ilbm)
+{
+	static int frame = 0;
+	bool exitFlag = false;
+	while (!exitFlag)
+	{
+		WaitBOVP(&OSScreen->ViewPort);
+		if (pollMessages() != InputEvent_None)
+			exitFlag = true;
+
+		animatePalette(ilbm, frame);
+		
+		frame++;
+	}
 }
 
 void copyImageToScreen(Ilbm* ilbm)
@@ -192,8 +233,6 @@ void displayImage(Ilbm* ilbm)
 	setPalette(ilbm->palette.numColors, ilbm->palette.colors);
 
 	copyImageToScreen(ilbm);
-
-	pollMessages();
 }
 
 int main(int argc, char** argv)
@@ -213,6 +252,7 @@ int main(int argc, char** argv)
 		return -1;
 
 	displayImage(ilbm);
+	displayLoop(ilbm);
 	cleanup();
 	
 	freeIlbm(ilbm);
