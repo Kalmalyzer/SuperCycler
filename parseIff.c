@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define DEBUG_IFF_PARSER
+//#define DEBUG_IFF_PARSER
 
 typedef struct
 {

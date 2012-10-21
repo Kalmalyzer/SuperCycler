@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define DEBUG_ILBM_PARSER
+//#define DEBUG_ILBM_PARSER
 //#define DEBUG_ILBM_PARSER_BITMAP_DECODE
 
 
