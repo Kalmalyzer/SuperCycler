@@ -72,7 +72,8 @@ void cleanup(void)
 
 void pollMessages(void)
 {
-	while (true)
+	bool exitFlag = false;
+	while (!exitFlag)
 	{
 		WaitTOF();
 		
@@ -82,13 +83,14 @@ void pollMessages(void)
 		{
 			switch (msg->Class)
 			{
-				case IDCMP_RAWKEY:
+				
+				case IDCMP_VANILLAKEY:
 				{
 					uint key = msg->Code & ~IECODE_UP_PREFIX;
 					uint up = msg->Code & IECODE_UP_PREFIX;
-					
-					if (key == 1)
-						return;
+
+					if (key == 27)
+						exitFlag = true;
 				}
 			}
 
@@ -97,6 +99,18 @@ void pollMessages(void)
 	}
 }
 
+void setPalette(void)
+{
+	static uint32_t palette[1 + 256 * 3 + 1];
+	
+	palette[0] = 256;
+	for (uint i = 0; i < 256 * 3; i++)
+		palette[1 + i] = 0;
+		
+	palette[1 + 256*3] = 0;
+	
+	LoadRGB32(&OSScreen->ViewPort, (ULONG*) palette);
+}
 
 void displayImage(Ilbm* ilbm)
 {
@@ -144,7 +158,7 @@ void displayImage(Ilbm* ilbm)
 
 	OSWindow->UserPort = IDCMPMsgPort;
 
-	ModifyIDCMP(OSWindow, IDCMP_RAWKEY);
+	ModifyIDCMP(OSWindow, IDCMP_VANILLAKEY);
 
 	if (!(OSMsgPort = CreateMsgPort()))
 	{
@@ -152,6 +166,8 @@ void displayImage(Ilbm* ilbm)
 		return;
 	}
 
+	setPalette();
+	
 	pollMessages();
 }
 
