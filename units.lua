@@ -15,4 +15,5 @@ Program {
 	},
 }
 
+Default "TestIffParser"
 Default "TestIlbmParser"
