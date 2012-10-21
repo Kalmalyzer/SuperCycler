@@ -129,7 +129,7 @@ static bool processChunkData(IffParseContext* parseContext, const IffParseRules*
 #ifdef DEBUG_IFF_PARSER
 		printf("DEBUG_IFF_PARSER: Invoking chunk handler\n");
 #endif
-		bool result = chunkHandler->handlerFunc(parseContext->chunkBuffer, chunkHeader->size);
+		bool result = chunkHandler->handlerFunc(rules->chunkHandlerState, parseContext->chunkBuffer, chunkHeader->size);
 #ifdef DEBUG_IFF_PARSER
 		printf("DEBUG_IFF_PARSER: Chunk handling %s\n", result ? "succeeded" : "failed");
 #endif

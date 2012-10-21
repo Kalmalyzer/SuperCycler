@@ -4,7 +4,7 @@
 
 #include "Types.h"
 
-typedef bool (*IffChunkHandlerFunc)(void* buffer, unsigned int size);
+typedef bool (*IffChunkHandlerFunc)(void* state, void* buffer, unsigned int size);
 
 typedef void (*IffErrorFunc)(const char* message);
 
@@ -18,6 +18,7 @@ typedef struct
 {
 	IffErrorFunc errorFunc;
 	IffChunkHandler* chunkHandlers;
+	void* chunkHandlerState;
 } IffParseRules;
 
 enum

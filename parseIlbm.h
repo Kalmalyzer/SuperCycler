@@ -3,6 +3,7 @@
 #define PARSEILBM_H
 
 #include "Types.h"
+#include "ParseIff.h"
 
 typedef struct
 {
@@ -24,7 +25,7 @@ typedef struct
 	IlbmPlane planes[8];
 } Ilbm;
 
-Ilbm* parseIlbm(const char* fileName);
+Ilbm* parseIlbm(const char* fileName, IffErrorFunc errorFunc);
 void freeIlbm(Ilbm* ilbm);
 
 #endif

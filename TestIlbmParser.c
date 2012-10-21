@@ -3,6 +3,11 @@
 
 #include <stdio.h>
 
+void parseErrorCallback(const char* message)
+{
+	printf("Error: %s\n", message);
+}
+
 int main(int argc, char** argv)
 {
 	if (argc != 2)
@@ -11,7 +16,7 @@ int main(int argc, char** argv)
 		return 0;
 	}
 
-	Ilbm* ilbm = parseIlbm(argv[1]);
+	Ilbm* ilbm = parseIlbm(argv[1], parseErrorCallback);
 	
 	if (ilbm)
 		freeIlbm(ilbm);

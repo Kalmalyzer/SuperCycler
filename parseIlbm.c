@@ -36,13 +36,9 @@ typedef struct {
 	uint16_t pageWidth, pageHeight;	/* source "page" size in pixels	*/
 	} BitMapHeader;
 
-void parseErrorCallback(const char* message)
-{
-	printf("Error: %s\n", message);
-}
-
 typedef struct
 {
+	IffErrorFunc errorFunc;
 	Ilbm* ilbm;
 	bool encounteredBMHD;
 	uint compression;
@@ -58,14 +54,14 @@ static uint decodeRLE(uint8_t* dest, uint8_t* src, uint destBytes)
 	uint8_t* destEnd = dest + destBytes;
 
 #ifdef DEBUG_ILBM_PARSER_BITMAP_DECODE
-	printf("Decoding RLE datastream: output %u bytes\n", destBytes);
+	printf("DEBUG_ILBM_PARSER_BITMAP_DECODE: Decoding RLE datastream: output %u bytes\n", destBytes);
 #endif
 	
 	while (dest != destEnd)
 	{
 		int8_t count = *src++;
 #ifdef DEBUG_ILBM_PARSER_BITMAP_DECODE
-		printf("  count = %d\n", count);
+		printf("DEBUG_ILBM_PARSER_BITMAP_DECODE:  count = %d\n", count);
 #endif
 		if (count >= 0)
 		{
@@ -94,14 +90,14 @@ static uint skipRLE(uint8_t* src, uint destBytes)
 	uint8_t* srcStart = src;
 
 #ifdef DEBUG_ILBM_PARSER_BITMAP_DECODE
-	printf("Skipping RLE datastream: output %u bytes\n", destBytes);
+	printf("DEBUG_ILBM_PARSER_BITMAP_DECODE: Skipping RLE datastream: output %u bytes\n", destBytes);
 #endif
 
 	while (destBytes)
 	{
 		int8_t count = *src++;
 #ifdef DEBUG_ILBM_PARSER_BITMAP_DECODE
-		printf("  count = %d\n", count);
+		printf("DEBUG_ILBM_PARSER_BITMAP_DECODE:  count = %d\n", count);
 #endif
 		if (count >= 0)
 		{
@@ -119,60 +115,63 @@ static uint skipRLE(uint8_t* src, uint destBytes)
 	return (src - srcStart);
 }
 
-static bool handleBMHD(void* buffer, unsigned int size)
+static bool handleBMHD(void* state_, void* buffer, unsigned int size)
 {
+	ParseIlbmState* state = (ParseIlbmState*) state_;
 	if (size != sizeof BitMapHeader)
 	{
-		parseErrorCallback("Invalid BMHD size");
+		state->errorFunc("Invalid BMHD size");
 		return false;
 	}
 
 	BitMapHeader* header = (BitMapHeader*) buffer;
 	
-	parseIlbmState.encounteredBMHD = true;
-	parseIlbmState.ilbm->width = header->w;
-	parseIlbmState.ilbm->height = header->h;
-	parseIlbmState.ilbm->depth = header->nPlanes;
+	state->encounteredBMHD = true;
+	Ilbm* ilbm = state->ilbm;
+	ilbm->width = header->w;
+	ilbm->height = header->h;
+	ilbm->depth = header->nPlanes;
 
 	switch (header->compression)
 	{
 		case cmpNone:
 		case cmpByteRun1:
-			parseIlbmState.compression = header->compression;
+			state->compression = header->compression;
 			break;
 		default:
 			{
 				char buf[1024];
 				sprintf(buf, "Unknown compression type %u\n", header->compression);
-				parseErrorCallback(buf);
+				state->errorFunc(buf);
 				return false;
 			}
 	}
 
-	parseIlbmState.hasMaskPlane = (header->masking == mskHasMask);
+	state->hasMaskPlane = (header->masking == mskHasMask);
 	
 #ifdef DEBUG_ILBM_PARSER
-	printf("Image dimensions: %ux%u pixels, %u bitplanes%s\n", parseIlbmState.ilbm->width, parseIlbmState.ilbm->height, parseIlbmState.ilbm->depth, (parseIlbmState.hasMaskPlane ? " (+ 1 mask bitplane)" : ""));
-	printf("Image compression: %s\n", parseIlbmState.compression ? "RLE" : "None");
+	printf("DEBUG_ILBM_PARSER: Image dimensions: %ux%u pixels, %u bitplanes%s\n", ilbm->width, ilbm->height, ilbm->depth, (state->hasMaskPlane ? " (+ 1 mask bitplane)" : ""));
+	printf("DEBUG_ILBM_PARSER: Image compression: %s\n", state->compression ? "RLE" : "None");
 #endif
 
 	return true;
 }
 
-static bool handleCMAP(void* buffer, unsigned int size)
+static bool handleCMAP(void* state_, void* buffer, unsigned int size)
 {
-	Ilbm* ilbm = parseIlbmState.ilbm;
+	ParseIlbmState* state = (ParseIlbmState*) state_;
+	Ilbm* ilbm = state->ilbm;
 	
 	if (size % 3)
 	{
-		parseErrorCallback("CMAP chunk size must be an even multiple of 3 bytes");
+		state->errorFunc("CMAP chunk size must be an even multiple of 3 bytes");
 		return false;
 	}
 	
 	ilbm->palette.numColors = size / 3;
 	
 #ifdef DEBUG_ILBM_PARSER
-		printf("Found %u palette entries\n", ilbm->palette.numColors);
+		printf("DEBUG_ILBM_PARSER: Found %u palette entries\n", ilbm->palette.numColors);
 #endif
 
 	uint8_t* source = (uint8_t*) buffer;
@@ -185,22 +184,23 @@ static bool handleCMAP(void* buffer, unsigned int size)
 	return true;
 }
 
-static bool handleBODY(void* buffer, unsigned int size)
+static bool handleBODY(void* state_, void* buffer, unsigned int size)
 {
-	Ilbm* ilbm = parseIlbmState.ilbm;
+	ParseIlbmState* state = (ParseIlbmState*) state_;
+	Ilbm* ilbm = state->ilbm;
 	uint bytesPerRow = ((ilbm->width + 15) / 16) * 2;
 	uint bytesPerPlane = bytesPerRow * ilbm->height;
 	uint bytesToAllocate = bytesPerPlane * ilbm->depth;
 
 #ifdef DEBUG_ILBM_PARSER
-	printf("Allocating memory for %ux%ux%u planes\n", ilbm->width, ilbm->height, ilbm->depth);
+	printf("DEBUG_ILBM_PARSER: Allocating memory for %ux%ux%u planes\n", ilbm->width, ilbm->height, ilbm->depth);
 #endif
 
 	if (!(ilbm->planes[0].data = malloc(bytesToAllocate)))
 	{
 		char buf[1024];
 		sprintf(buf, "Unable to allocate %u bytes\n", bytesToAllocate);
-		parseErrorCallback(buf);
+		state->errorFunc(buf);
 		return false;
 	}
 
@@ -208,7 +208,7 @@ static bool handleBODY(void* buffer, unsigned int size)
 		ilbm->planes[planeIndex].data = (void*) ((uint8_t*) ilbm->planes[0].data + planeIndex * bytesPerPlane);
 
 #ifdef DEBUG_ILBM_PARSER
-	printf("Decoding bitmap data\n");
+	printf("DEBUG_ILBM_PARSER: Decoding bitmap data\n");
 #endif
 
 	uint8_t* sourcePtr = (uint8_t*) buffer;
@@ -221,9 +221,9 @@ static bool handleBODY(void* buffer, unsigned int size)
 			uint8_t* destPtrEnd = destPtr + bytesPerRow;
 
 #ifdef DEBUG_ILBM_PARSER_BITMAP_DECODE
-			printf("Decoding row %u, plane %u\n", row, plane);
+			printf("DEBUG_ILBM_PARSER: Decoding row %u, plane %u\n", row, plane);
 #endif
-			switch (parseIlbmState.compression)
+			switch (state->compression)
 			{
 				case cmpNone:
 					memcpy(destPtr, sourcePtr, bytesPerRow);
@@ -233,17 +233,17 @@ static bool handleBODY(void* buffer, unsigned int size)
 					sourcePtr += decodeRLE(destPtr, sourcePtr, bytesPerRow);
 					break;
 				default:
-					parseErrorCallback("Compression method not implemented");
+					state->errorFunc("Compression method not implemented");
 					return false;
 			}
 		}
 
-		if (parseIlbmState.hasMaskPlane)
+		if (state->hasMaskPlane)
 		{
 #ifdef DEBUG_ILBM_PARSER_BITMAP_DECODE
-			printf("Skipping over mask plane\n");
+			printf("DEBUG_ILBM_PARSER: Skipping over mask plane\n");
 #endif
-			switch (parseIlbmState.compression)
+			switch (state->compression)
 			{
 				case cmpNone:
 					sourcePtr += bytesPerRow;
@@ -253,55 +253,58 @@ static bool handleBODY(void* buffer, unsigned int size)
 					break;
 					return false;
 				default:
-					parseErrorCallback("Compression method not implemented");
+					state->errorFunc("Compression method not implemented");
 					return false;
 			}
 		}
 		
 		if (sourcePtr > sourcePtrEnd)
 		{
-			parseErrorCallback("Error during BODY decoding (source buffer overrun)");
+			state->errorFunc("Error during BODY decoding (source buffer overrun)");
 			return false;
 		}
 	}
 	
 	if (sourcePtr != sourcePtrEnd)
 	{
-		parseErrorCallback("Error during BODY decoding (source buffer underrun/overrun)");
+		state->errorFunc("Error during BODY decoding (source buffer underrun/overrun)");
 		return false;
 	}
 
 #ifdef DEBUG_ILBM_PARSER
-	printf("Finished decoding bitmap data\n");
+	printf("DEBUG_ILBM_PARSER: Finished decoding bitmap data\n");
 #endif
 	return true;
 }
 
-static void cleanup(void)
+static void cleanup(ParseIlbmState* state)
 {
-	if (parseIlbmState.ilbm)
-	{
-		freeIlbm(parseIlbmState.ilbm);
-		parseIlbmState.ilbm = 0;
-	}
+	if (state->ilbm)
+		freeIlbm(state->ilbm);
 }
 
-Ilbm* parseIlbm(const char* fileName)
+Ilbm* parseIlbm(const char* fileName, IffErrorFunc errorFunc)
 {
-	static IffChunkHandler chunkHandlers[] = {
+	ParseIlbmState parseIlbmState = { 0 };
+
+	IffChunkHandler chunkHandlers[] = {
 		{ ID_BMHD, handleBMHD },
 		{ ID_CMAP, handleCMAP },
 		{ ID_BODY, handleBODY },
 		{ 0, 0 },
 	};
-	static IffParseRules parseRules = { parseErrorCallback, chunkHandlers };
-	
+	IffParseRules parseRules;
+	parseRules.errorFunc = errorFunc;
+	parseRules.chunkHandlers = chunkHandlers;
+	parseRules.chunkHandlerState = &parseIlbmState;
+
+	parseIlbmState.errorFunc = errorFunc;
 	parseIlbmState.ilbm = malloc(sizeof Ilbm);
 	memset(parseIlbmState.ilbm, 0, sizeof Ilbm);
 
 	if (!parseIff(fileName, &parseRules))
 	{
-		cleanup();
+		cleanup(&parseIlbmState);
 		return 0;
 	}
 	
