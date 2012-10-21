@@ -185,6 +185,32 @@ bool handleBMHD(void* buffer, unsigned int size)
 	return true;
 }
 
+bool handleCMAP(void* buffer, unsigned int size)
+{
+	Ilbm* ilbm = parseIlbmState.ilbm;
+	
+	if (size % 3)
+	{
+		parseErrorCallback("CMAP chunk size must be an even multiple of 3 bytes");
+		return false;
+	}
+	
+	ilbm->palette.numColors = size / 3;
+	
+#ifdef DEBUG_ILBM_PARSER
+		printf("Found %u palette entries\n", ilbm->palette.numColors);
+#endif
+
+	uint8_t* source = (uint8_t*) buffer;
+	for (uint color = 0; color < ilbm->palette.numColors; ++color)
+	{
+		ilbm->palette.colors[color] = (source[0] << 16) | (source[1] << 8) | (source[2]);
+		source += 3;
+	}
+	
+	return true;
+}
+
 bool handleBODY(void* buffer, unsigned int size)
 {
 	Ilbm* ilbm = parseIlbmState.ilbm;
@@ -290,6 +316,7 @@ Ilbm* parseIlbm(const char* fileName)
 {
 	static IffChunkHandler chunkHandlers[] = {
 		{ ID_BMHD, handleBMHD },
+		{ ID_CMAP, handleCMAP },
 		{ ID_BODY, handleBODY },
 		{ 0, 0 },
 	};
