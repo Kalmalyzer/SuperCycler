@@ -427,25 +427,25 @@ static bool handleBODY(void* state_, void* buffer, unsigned int size)
 #define MERGE16(a, b, temp, shift, mask) \
 	temp = ((b >> shift) ^ a) & mask; \
 	a ^= temp; \
-	b ^= temp << shift;
+	b ^= (temp << shift);
 
 					uint16_t temp;
 					MERGE16(planeData[0], planeData[4], temp, 8, 0x00ff);
 					MERGE16(planeData[1], planeData[5], temp, 8, 0x00ff);
 					MERGE16(planeData[2], planeData[6], temp, 8, 0x00ff);
 					MERGE16(planeData[3], planeData[7], temp, 8, 0x00ff);
-					MERGE16(planeData[0], planeData[4], temp, 4, 0x0f0f);
-					MERGE16(planeData[1], planeData[5], temp, 4, 0x0f0f);
-					MERGE16(planeData[2], planeData[6], temp, 4, 0x0f0f);
-					MERGE16(planeData[3], planeData[7], temp, 4, 0x0f0f);
+					MERGE16(planeData[0], planeData[2], temp, 4, 0x0f0f);
+					MERGE16(planeData[1], planeData[3], temp, 4, 0x0f0f);
+					MERGE16(planeData[4], planeData[6], temp, 4, 0x0f0f);
+					MERGE16(planeData[5], planeData[7], temp, 4, 0x0f0f);
 					MERGE16(planeData[0], planeData[1], temp, 2, 0x3333);
 					MERGE16(planeData[2], planeData[3], temp, 2, 0x3333);
 					MERGE16(planeData[4], planeData[5], temp, 2, 0x3333);
 					MERGE16(planeData[6], planeData[7], temp, 2, 0x3333);
-					MERGE16(planeData[0], planeData[2], temp, 1, 0x5555);
-					MERGE16(planeData[1], planeData[3], temp, 1, 0x5555);
-					MERGE16(planeData[4], planeData[6], temp, 1, 0x5555);
-					MERGE16(planeData[5], planeData[7], temp, 1, 0x5555);
+					MERGE16(planeData[0], planeData[4], temp, 1, 0x5555);
+					MERGE16(planeData[1], planeData[5], temp, 1, 0x5555);
+					MERGE16(planeData[2], planeData[6], temp, 1, 0x5555);
+					MERGE16(planeData[3], planeData[7], temp, 1, 0x5555);
 
 #undef MERGE16
 
