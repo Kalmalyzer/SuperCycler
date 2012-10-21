@@ -25,6 +25,7 @@ enum
 {
 	ID_FORM = 'FORM',
 	ID_ILBM = 'ILBM',
+	ID_PBM  = 'PBM ',
 	ID_BMHD = 'BMHD',
 	ID_BODY = 'BODY',
 	ID_CMAP = 'CMAP',

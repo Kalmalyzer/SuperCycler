@@ -8,6 +8,11 @@ void parseErrorCallback(const char* message)
 	printf("Error: %s\n", message);
 }
 
+bool handleILBM(void* state, void* buffer, unsigned int size)
+{
+	return true;
+}
+
 bool handleBMHD(void* state, void* buffer, unsigned int size)
 {
 	return true;
@@ -21,6 +26,7 @@ bool handleBODY(void* state, void* buffer, unsigned int size)
 int main(int argc, char** argv)
 {
 	static IffChunkHandler chunkHandlers[] = {
+		{ ID_ILBM, handleILBM },
 		{ ID_BMHD, handleBMHD },
 		{ ID_BODY, handleBODY },
 		{ 0, 0 },

@@ -36,13 +36,23 @@ typedef struct {
 	uint16_t pageWidth, pageHeight;	/* source "page" size in pixels	*/
 	} BitMapHeader;
 
+typedef enum
+{
+	PixelFormat_Unknown,
+	PixelFormat_Ilbm,
+	PixelFormat_Pbm,
+} PixelFormat;
+	
 typedef struct
 {
 	IffErrorFunc errorFunc;
 	Ilbm* ilbm;
 	bool encounteredBMHD;
+	bool encounteredBODY;
 	uint compression;
 	bool hasMaskPlane;
+	PixelFormat pixelFormat;
+	uint8_t* pbmRowBuffer;
 
 } ParseIlbmState;
 
@@ -115,6 +125,20 @@ static uint skipRLE(uint8_t* src, uint destBytes)
 	return (src - srcStart);
 }
 
+static bool handleILBM(void* state_, void* buffer, unsigned int size)
+{
+	ParseIlbmState* state = (ParseIlbmState*) state_;
+	state->pixelFormat = PixelFormat_Ilbm;
+	return true;
+}
+
+static bool handlePBM(void* state_, void* buffer, unsigned int size)
+{
+	ParseIlbmState* state = (ParseIlbmState*) state_;
+	state->pixelFormat = PixelFormat_Pbm;
+	return true;
+}
+
 static bool handleBMHD(void* state_, void* buffer, unsigned int size)
 {
 	ParseIlbmState* state = (ParseIlbmState*) state_;
@@ -148,7 +172,7 @@ static bool handleBMHD(void* state_, void* buffer, unsigned int size)
 	}
 
 	state->hasMaskPlane = (header->masking == mskHasMask);
-	
+
 #ifdef DEBUG_ILBM_PARSER
 	printf("DEBUG_ILBM_PARSER: Image dimensions: %ux%u pixels, %u bitplanes%s\n", ilbm->width, ilbm->height, ilbm->depth, (state->hasMaskPlane ? " (+ 1 mask bitplane)" : ""));
 	printf("DEBUG_ILBM_PARSER: Image compression: %s\n", state->compression ? "RLE" : "None");
@@ -198,6 +222,22 @@ static bool handleBODY(void* state_, void* buffer, unsigned int size)
 		return false;
 	}
 	
+	if (state->encounteredBODY)
+	{
+#ifdef DEBUG_ILBM_PARSER
+		printf("DEBUG_ILBM_PARSER: Ignoring multiple BODYs\n");
+#endif
+		return true;
+	}
+
+	state->encounteredBODY = true;
+	
+	if (state->pixelFormat == PixelFormat_Pbm && state->hasMaskPlane)
+	{
+		state->errorFunc("PBM format parser doesn't support mask plane");
+		return false;
+	}
+	
 #ifdef DEBUG_ILBM_PARSER
 	printf("DEBUG_ILBM_PARSER: Allocating memory for %ux%ux%u planes\n", ilbm->width, ilbm->height, ilbm->depth);
 #endif
@@ -217,50 +257,158 @@ static bool handleBODY(void* state_, void* buffer, unsigned int size)
 	printf("DEBUG_ILBM_PARSER: Decoding bitmap data\n");
 #endif
 
+	if (state->pixelFormat == PixelFormat_Pbm)
+	{
+		uint rowBufferBytes = (ilbm->width + 31) & ~31;
+		if (!(state->pbmRowBuffer = malloc(rowBufferBytes)))
+		{
+			char buf[1024];
+			sprintf(buf, "Unable to allocate %u bytes\n", rowBufferBytes);
+			state->errorFunc(buf);
+			return false;
+		}
+		
+		memset(state->pbmRowBuffer, 0, rowBufferBytes);
+	}
+
 	uint8_t* sourcePtr = (uint8_t*) buffer;
 	uint8_t* sourcePtrEnd = sourcePtr + size;
 	for (uint row = 0; row < ilbm->height; ++row)
 	{
-		for (uint plane = 0; plane < ilbm->depth; ++plane)
+		switch (state->pixelFormat)
 		{
-			uint8_t* destPtr = (uint8_t*) ilbm->planes[plane].data + row * bytesPerRow;
-			uint8_t* destPtrEnd = destPtr + bytesPerRow;
+			case PixelFormat_Ilbm:
+			{
+				for (uint plane = 0; plane < ilbm->depth; ++plane)
+				{
+					uint8_t* destPtr = (uint8_t*) ilbm->planes[plane].data + row * bytesPerRow;
+					uint8_t* destPtrEnd = destPtr + bytesPerRow;
 
 #ifdef DEBUG_ILBM_PARSER_BITMAP_DECODE
-			printf("DEBUG_ILBM_PARSER: Decoding row %u, plane %u\n", row, plane);
+					printf("DEBUG_ILBM_PARSER: Decoding row %u, plane %u\n", row, plane);
 #endif
-			switch (state->compression)
-			{
-				case cmpNone:
-					memcpy(destPtr, sourcePtr, bytesPerRow);
-					sourcePtr += bytesPerRow;
-					break;
-				case cmpByteRun1:
-					sourcePtr += decodeRLE(destPtr, sourcePtr, bytesPerRow);
-					break;
-				default:
-					state->errorFunc("Compression method not implemented");
-					return false;
+					switch (state->compression)
+					{
+						case cmpNone:
+							memcpy(destPtr, sourcePtr, bytesPerRow);
+							sourcePtr += bytesPerRow;
+							break;
+						case cmpByteRun1:
+							sourcePtr += decodeRLE(destPtr, sourcePtr, bytesPerRow);
+							break;
+						default:
+							state->errorFunc("Compression method not implemented");
+							return false;
+					}
+				}
+
+				if (state->hasMaskPlane)
+				{
+#ifdef DEBUG_ILBM_PARSER_BITMAP_DECODE
+					printf("DEBUG_ILBM_PARSER: Skipping over mask plane\n");
+#endif
+					switch (state->compression)
+					{
+						case cmpNone:
+							sourcePtr += bytesPerRow;
+							break;
+						case cmpByteRun1:
+							sourcePtr += skipRLE(sourcePtr, bytesPerRow);
+							break;
+							return false;
+						default:
+							state->errorFunc("Compression method not implemented");
+							return false;
+					}
+				}
+				break;
 			}
-		}
-
-		if (state->hasMaskPlane)
-		{
-#ifdef DEBUG_ILBM_PARSER_BITMAP_DECODE
-			printf("DEBUG_ILBM_PARSER: Skipping over mask plane\n");
-#endif
-			switch (state->compression)
+			case PixelFormat_Pbm:
 			{
-				case cmpNone:
-					sourcePtr += bytesPerRow;
-					break;
-				case cmpByteRun1:
-					sourcePtr += skipRLE(sourcePtr, bytesPerRow);
-					break;
-					return false;
-				default:
-					state->errorFunc("Compression method not implemented");
-					return false;
+#ifdef DEBUG_ILBM_PARSER_BITMAP_DECODE
+				printf("DEBUG_ILBM_PARSER: Decoding row %u\n", row);
+#endif
+				switch (state->compression)
+				{
+					case cmpNone:
+						memcpy(state->pbmRowBuffer, sourcePtr, ilbm->width);
+						sourcePtr += ilbm->width;
+						break;
+					case cmpByteRun1:
+						sourcePtr += decodeRLE(state->pbmRowBuffer, sourcePtr, ilbm->width);
+						break;
+					default:
+						state->errorFunc("Compression method not implemented");
+						return false;
+				}
+#ifdef DEBUG_ILBM_PARSER_BITMAP_DECODE
+				printf("DEBUG_ILBM_PARSER: C2P converting row %u\n", row);
+#endif
+				uint16_t planeData[8] = { 0 };
+				
+				for (uint offset = 0; offset < ilbm->width; offset += sizeof planeData)
+				{
+					uint bytesToCopy = ilbm->width - offset;
+					if (bytesToCopy > sizeof planeData)
+						bytesToCopy = sizeof planeData;
+					
+					memcpy(planeData, &state->pbmRowBuffer[offset], bytesToCopy);
+					uint bytesToClear = sizeof planeData - bytesToCopy;
+					if (bytesToClear)
+						memset(&state->pbmRowBuffer[offset + bytesToCopy], 0, bytesToClear);
+					
+#define MERGE16(a, b, temp, shift, mask) \
+	temp = ((b >> shift) ^ a) & mask; \
+	a ^= temp; \
+	b ^= temp << shift;
+
+					uint16_t temp;
+					MERGE16(planeData[0], planeData[4], temp, 8, 0x00ff);
+					MERGE16(planeData[1], planeData[5], temp, 8, 0x00ff);
+					MERGE16(planeData[2], planeData[6], temp, 8, 0x00ff);
+					MERGE16(planeData[3], planeData[7], temp, 8, 0x00ff);
+					MERGE16(planeData[0], planeData[4], temp, 4, 0x0f0f);
+					MERGE16(planeData[1], planeData[5], temp, 4, 0x0f0f);
+					MERGE16(planeData[2], planeData[6], temp, 4, 0x0f0f);
+					MERGE16(planeData[3], planeData[7], temp, 4, 0x0f0f);
+					MERGE16(planeData[0], planeData[1], temp, 2, 0x3333);
+					MERGE16(planeData[2], planeData[3], temp, 2, 0x3333);
+					MERGE16(planeData[4], planeData[5], temp, 2, 0x3333);
+					MERGE16(planeData[6], planeData[7], temp, 2, 0x3333);
+					MERGE16(planeData[0], planeData[2], temp, 1, 0x5555);
+					MERGE16(planeData[1], planeData[3], temp, 1, 0x5555);
+					MERGE16(planeData[4], planeData[6], temp, 1, 0x5555);
+					MERGE16(planeData[5], planeData[7], temp, 1, 0x5555);
+
+#undef MERGE16
+
+					uint16_t shuffledPlaneData[8];
+					
+					shuffledPlaneData[7] = planeData[0];
+					shuffledPlaneData[5] = planeData[1];
+					shuffledPlaneData[3] = planeData[2];
+					shuffledPlaneData[1] = planeData[3];
+					shuffledPlaneData[6] = planeData[4];
+					shuffledPlaneData[4] = planeData[5];
+					shuffledPlaneData[2] = planeData[6];
+					shuffledPlaneData[0] = planeData[7];
+
+					for (uint plane = 0; plane < ilbm->depth; ++plane)
+					{
+						uint16_t* destPtr = (uint16_t*) ((uint8_t*) ilbm->planes[plane].data + row * bytesPerRow + (offset >> 3));
+						*destPtr = shuffledPlaneData[plane];
+					}
+
+				}
+				
+				break;
+			}
+			default:
+			{
+				char buf[1024];
+				sprintf(buf, "Unsupported pixelFormat %d\n", (int) state->pixelFormat);
+				state->errorFunc(buf);
+				return false;
 			}
 		}
 		
@@ -287,6 +435,9 @@ static void cleanup(ParseIlbmState* state)
 {
 	if (state->ilbm)
 		freeIlbm(state->ilbm);
+		
+	if (state->pbmRowBuffer)
+		free(state->pbmRowBuffer);
 }
 
 Ilbm* parseIlbm(const char* fileName, IffErrorFunc errorFunc)
@@ -294,6 +445,8 @@ Ilbm* parseIlbm(const char* fileName, IffErrorFunc errorFunc)
 	ParseIlbmState parseIlbmState = { 0 };
 
 	IffChunkHandler chunkHandlers[] = {
+		{ ID_ILBM, handleILBM },
+		{ ID_PBM,  handlePBM },
 		{ ID_BMHD, handleBMHD },
 		{ ID_CMAP, handleCMAP },
 		{ ID_BODY, handleBODY },
@@ -313,8 +466,13 @@ Ilbm* parseIlbm(const char* fileName, IffErrorFunc errorFunc)
 		cleanup(&parseIlbmState);
 		return 0;
 	}
-	
-	return parseIlbmState.ilbm;
+	else
+	{
+		Ilbm* ilbm = parseIlbmState.ilbm;
+		parseIlbmState.ilbm = 0;
+		cleanup(&parseIlbmState);
+		return ilbm;
+	}
 }
 
 void freeIlbm(Ilbm* ilbm)

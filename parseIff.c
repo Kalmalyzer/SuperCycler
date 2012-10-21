@@ -33,8 +33,6 @@ static bool validateIffHeader(const IffHeader* iffHeader)
 		return false;
 	if (iffHeader->compositeSize > 16*1024*1024 || iffHeader->compositeSize < 4)
 		return false;
-	if (iffHeader->dataType != ID_ILBM)
-		return false;
 
 	return true;
 }
@@ -98,6 +96,48 @@ static bool processChunkHeader(IffParseContext* parseContext, const IffParseRule
 	return true;
 }
 
+static bool invokeChunkHandler(IffParseContext* parseContext, const IffParseRules* rules, uint32_t id, void* buffer, uint size, bool handlerRequired)
+{
+#ifdef DEBUG_IFF_PARSER
+	printf("DEBUG_IFF_PARSER: Locating chunk handler\n");
+#endif
+
+	IffChunkHandler* chunkHandler;
+	for (chunkHandler = rules->chunkHandlers; chunkHandler->id; chunkHandler++)
+		if (chunkHandler->id == id)
+			break;
+
+	if (chunkHandler->id)
+	{
+#ifdef DEBUG_IFF_PARSER
+		printf("DEBUG_IFF_PARSER: Invoking chunk handler\n");
+#endif
+		bool result = chunkHandler->handlerFunc(rules->chunkHandlerState, buffer, size);
+#ifdef DEBUG_IFF_PARSER
+		printf("DEBUG_IFF_PARSER: Chunk handling %s\n", result ? "succeeded" : "failed");
+#endif
+		if (!result)
+			return false;
+	}
+	else
+	{
+		if (handlerRequired)
+		{
+#ifdef DEBUG_IFF_PARSER
+			printf("DEBUG_IFF_PARSER: No chunk handler found, parsing failed\n");
+#endif
+			return false;
+		}
+		else
+		{
+#ifdef DEBUG_IFF_PARSER
+			printf("DEBUG_IFF_PARSER: No chunk handler found, chunk will be ignored\n");
+#endif
+			return true;
+		}
+	}
+}
+
 static bool processChunkData(IffParseContext* parseContext, const IffParseRules* rules, const IffChunkHeader* chunkHeader)
 {
 	if (!(parseContext->chunkBuffer = malloc(chunkHeader->size)))
@@ -115,33 +155,8 @@ static bool processChunkData(IffParseContext* parseContext, const IffParseRules*
 	if (!readBytesFromStream(parseContext, rules, parseContext->chunkBuffer, chunkHeader->size))
 		return false;
 	
-#ifdef DEBUG_IFF_PARSER
-	printf("DEBUG_IFF_PARSER: Locating chunk handler\n");
-#endif
-
-	IffChunkHandler* chunkHandler;
-	for (chunkHandler = rules->chunkHandlers; chunkHandler->id; chunkHandler++)
-		if (chunkHandler->id == chunkHeader->id)
-			break;
-
-	if (chunkHandler->id)
-	{
-#ifdef DEBUG_IFF_PARSER
-		printf("DEBUG_IFF_PARSER: Invoking chunk handler\n");
-#endif
-		bool result = chunkHandler->handlerFunc(rules->chunkHandlerState, parseContext->chunkBuffer, chunkHeader->size);
-#ifdef DEBUG_IFF_PARSER
-		printf("DEBUG_IFF_PARSER: Chunk handling %s\n", result ? "succeeded" : "failed");
-#endif
-		if (!result)
-			return false;
-	}
-	else
-	{
-#ifdef DEBUG_IFF_PARSER
-		printf("DEBUG_IFF_PARSER: No chunk handler found, chunk will be ignored\n");
-#endif
-	}
+	if (!invokeChunkHandler(parseContext, rules, chunkHeader->id, parseContext->chunkBuffer, chunkHeader->size, false))
+		return false;
 	
 	free(parseContext->chunkBuffer);
 	parseContext->chunkBuffer = 0;
@@ -221,6 +236,13 @@ bool parseIff(const char* fileName, const IffParseRules* rules)
 	}
 
 	parseContext.compositeBytesLeft = iffHeader.compositeSize - 4;
+
+	if (!invokeChunkHandler(&parseContext, rules, iffHeader.dataType, 0, 0, true))
+	{
+		rules->errorFunc("Invalid IFF data type");
+		cleanup(&parseContext);
+		return false;
+	}
 
 #ifdef DEBUG_IFF_PARSER
 	printf("DEBUG_IFF_PARSER: Processing all chunks in file\n");
