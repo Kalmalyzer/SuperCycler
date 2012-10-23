@@ -93,6 +93,8 @@ void setPalette(uint numColors, uint32_t* colors)
 void animatePalette(Ilbm* ilbm, uint frame, bool blend)
 {
 	static uint32_t colors[256];
+	uint frameInt = (frame >> 16);
+	uint frameFrac = frame & 0xffff;
 
 	memcpy(colors, ilbm->palette.colors, ilbm->palette.numColors * sizeof uint32_t);
 
@@ -100,8 +102,9 @@ void animatePalette(Ilbm* ilbm, uint frame, bool blend)
 	{
 		IlbmColorRange* range = &ilbm->colorRanges[rangeId];
 		uint colorsInRange = range->high - range->low + 1;
-		//uint scaledRate = (frame * range->rate) / (16384*50);
-		uint scaledFrame = frame;
+		uint scaledFrameInt = frameInt * (range->rate << 2);
+		uint scaledFrameFrac = (frameFrac * range->rate) >> 14;
+		uint scaledFrame = scaledFrameInt + scaledFrameFrac;
 		
 		uint offset = (scaledFrame >> 16) % colorsInRange;
 		if (!range->reverse)
@@ -199,7 +202,7 @@ void displayLoop(Ilbm* ilbm)
 	bool exitFlag = false;
 	bool pause = false;
 	bool blend = false;
-	int speed = 5;
+	int speed = 1;
 	while (!exitFlag)
 	{
 		WaitTOF();
@@ -222,7 +225,7 @@ void displayLoop(Ilbm* ilbm)
 		animatePalette(ilbm, frame, blend);
 
 		if (!pause)
-			frame += ((65536 * (10 - speed)) / 20);
+			frame += (65536 / speed);
 	}
 }
 
