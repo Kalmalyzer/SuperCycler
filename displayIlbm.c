@@ -24,7 +24,74 @@ static struct MsgPort* OSMsgPort = 0;
 static struct Screen* OSScreen = 0;
 static struct Window* OSWindow = 0;
 
-void cleanup(void)
+static char s_ilbmName[256] = "";
+static Ilbm* s_ilbm = 0;
+static bool s_screen = false;
+
+bool openScreen(uint width, uint height, uint depth)
+{
+	if (!(IDCMPMsgPort = CreateMsgPort()))
+	{
+		printf("unable to open msgport\n");
+		return false;
+	}
+	
+	uint32_t modeID = BestModeID(BIDTAG_NominalWidth, width,
+		BIDTAG_NominalHeight, height,
+		BIDTAG_Depth, depth,
+		TAG_DONE);
+
+	if (modeID == INVALID_ID)
+	{
+		printf("No suitable screenmode available\n");
+		return false;
+	}
+
+#ifdef DEBUG_DISPLAY_ILBM
+	printf("modeID returned by BestModeID: 0x%08x\n", modeID);
+#endif
+	
+	if (!(OSScreen = OpenScreenTags(0,
+		SA_Width, width,
+		SA_Height, height,
+		SA_Depth, depth,
+		SA_Title, "SuperCycler",
+		SA_ShowTitle, FALSE,
+		SA_Quiet, TRUE,
+		SA_Exclusive, TRUE,
+		SA_DisplayID, modeID,
+		TAG_DONE)))
+	{
+		printf("Unable to open screen\n");
+		return false;
+	}
+
+	if (!(OSWindow = OpenWindowTags(0,
+		WA_CustomScreen, OSScreen,
+		WA_Flags, WFLG_ACTIVATE | WFLG_BACKDROP | WFLG_BORDERLESS | WFLG_RMBTRAP,
+		WA_IDCMP, 0,
+		TAG_DONE)))
+	{
+		printf("Unable to open window\n");
+		return false;
+	}
+
+	OSWindow->UserPort = IDCMPMsgPort;
+
+	ModifyIDCMP(OSWindow, IDCMP_VANILLAKEY);
+	
+	if (!(OSMsgPort = CreateMsgPort()))
+	{
+		printf("Unable to create msgport\n");
+		return false;
+	}
+	
+	s_screen = true;
+	
+	return true;
+}
+
+void closeScreen(void)
 {
 	if (OSScreen)
 	{
@@ -70,6 +137,19 @@ void cleanup(void)
 		DeleteMsgPort(IDCMPMsgPort);
 
 	IDCMPMsgPort = 0;
+	
+	s_screen = false;
+}
+
+void cleanup(void)
+{
+	if (s_ilbm)
+	{
+		freeIlbm(s_ilbm);
+		s_ilbm = 0;
+	}
+
+	closeScreen();
 }
 
 void setPalette(uint numColors, uint32_t* colors)
@@ -158,8 +238,8 @@ typedef enum
 	InputEvent_Speed8,
 	InputEvent_Speed9,
 	InputEvent_ToggleBlend,
+	InputEvent_Reload,
 } InputEvent;
-	
 
 InputEvent getInputEvent(void)
 {
@@ -184,6 +264,8 @@ InputEvent getInputEvent(void)
 					event = InputEvent_TogglePause;
 				else if (key == 'b' || key == 'B')
 					event = InputEvent_ToggleBlend;
+				else if (key == 'r' || key == 'R')
+					event = InputEvent_Reload;
 			}
 		}
 
@@ -196,7 +278,47 @@ InputEvent getInputEvent(void)
 	return event;
 }
 
-void displayLoop(Ilbm* ilbm)
+void copyImageToScreen(Ilbm* ilbm)
+{
+	for (uint plane = 0; plane < ilbm->depth; ++plane)
+		for (uint row = 0; row < ilbm->height; ++row)
+		{
+			void* source = (uint8_t*) ilbm->planes[plane].data + row * ilbm->bytesPerRow;
+			void* dest = OSScreen->RastPort.BitMap->Planes[plane] + row * OSScreen->RastPort.BitMap->BytesPerRow;
+			memcpy(dest, source, ilbm->bytesPerRow);
+		}
+}
+
+
+bool displayImage(const char* fileName)
+{
+	if (s_ilbm)
+	{
+		freeIlbm(s_ilbm);
+		s_ilbm = 0;
+	}
+	
+	if (s_screen)
+		closeScreen();
+	
+	Ilbm* ilbm = parseIlbm(fileName, parseErrorCallback);
+		
+	if (!ilbm)
+		return false;
+
+	s_ilbm = ilbm;
+	
+	if (!openScreen(ilbm->width, ilbm->height, ilbm->depth))
+		return false;
+
+	setPalette(ilbm->palette.numColors, ilbm->palette.colors);
+
+	copyImageToScreen(ilbm);
+	
+	return true;
+}
+
+void displayLoop()
 {
 	static int frame = 0;
 	bool exitFlag = false;
@@ -220,88 +342,18 @@ void displayLoop(Ilbm* ilbm)
 			{
 				speed = (event - InputEvent_Speed1 + 1);
 			}
+			else if (event == InputEvent_Reload)
+			{
+				if (!displayImage(s_ilbmName))
+					return;
+			}
 		}
 
-		animatePalette(ilbm, frame, blend);
+		animatePalette(s_ilbm, frame, blend);
 
 		if (!pause)
 			frame += (65536 / speed);
 	}
-}
-
-void copyImageToScreen(Ilbm* ilbm)
-{
-	for (uint plane = 0; plane < ilbm->depth; ++plane)
-		for (uint row = 0; row < ilbm->height; ++row)
-		{
-			void* source = (uint8_t*) ilbm->planes[plane].data + row * ilbm->bytesPerRow;
-			void* dest = OSScreen->RastPort.BitMap->Planes[plane] + row * OSScreen->RastPort.BitMap->BytesPerRow;
-			memcpy(dest, source, ilbm->bytesPerRow);
-		}
-}
-
-void displayImage(Ilbm* ilbm)
-{
-	if (!(IDCMPMsgPort = CreateMsgPort()))
-	{
-		printf("unable to open msgport\n");
-		return;
-	}
-	
-	uint32_t modeID = BestModeID(BIDTAG_NominalWidth, ilbm->width,
-		BIDTAG_NominalHeight, ilbm->height,
-		BIDTAG_Depth, ilbm->depth,
-		TAG_DONE);
-
-	if (modeID == INVALID_ID)
-	{
-		printf("No suitable screenmode available\n");
-		return;
-	}
-
-#ifdef DEBUG_DISPLAY_ILBM
-	printf("modeID returned by BestModeID: 0x%08x\n", modeID);
-#endif
-	
-	if (!(OSScreen = OpenScreenTags(0,
-		SA_Width, ilbm->width,
-		SA_Height, ilbm->height,
-		SA_Depth, ilbm->depth,
-		SA_Title, "SuperCycler",
-		SA_ShowTitle, FALSE,
-		SA_Quiet, TRUE,
-		SA_Exclusive, TRUE,
-		SA_DisplayID, modeID,
-		TAG_DONE)))
-	{
-		printf("Unable to open screen\n");
-		return;
-	}
-
-	if (!(OSWindow = OpenWindowTags(0,
-		WA_CustomScreen, OSScreen,
-		WA_Flags, WFLG_ACTIVATE | WFLG_BACKDROP | WFLG_BORDERLESS | WFLG_RMBTRAP,
-		WA_IDCMP, 0,
-		TAG_DONE)))
-	{
-		printf("Unable to open window\n");
-		return;
-	}
-
-	OSWindow->UserPort = IDCMPMsgPort;
-
-	ModifyIDCMP(OSWindow, IDCMP_VANILLAKEY);
-
-	
-	if (!(OSMsgPort = CreateMsgPort()))
-	{
-		printf("Unable to create msgport\n");
-		return;
-	}
-
-	setPalette(ilbm->palette.numColors, ilbm->palette.colors);
-
-	copyImageToScreen(ilbm);
 }
 
 int main(int argc, char** argv)
@@ -315,16 +367,16 @@ int main(int argc, char** argv)
 	GfxBase = (struct GfxBase*) OpenLibrary("graphics.library", 39);
 	IntuitionBase = (struct IntuitionBase*) OpenLibrary("intuition.library", 39);
 
-	Ilbm* ilbm = parseIlbm(argv[1], parseErrorCallback);
+	strcpy(s_ilbmName, argv[1]);
 	
-	if (!ilbm)
+	if (!displayImage(argv[1]))
+	{
+		cleanup();
 		return -1;
+	}
 
-	displayImage(ilbm);
-	displayLoop(ilbm);
+	displayLoop();
 	cleanup();
-	
-	freeIlbm(ilbm);
 		
 	return 0;
 }
