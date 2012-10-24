@@ -64,7 +64,7 @@ bool openScreen(uint width, uint height, uint depth)
 
 	OSWindow->UserPort = IDCMPMsgPort;
 
-	ModifyIDCMP(OSWindow, IDCMP_VANILLAKEY);
+	ModifyIDCMP(OSWindow, IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS);
 	
 	if (!(OSMsgPort = CreateMsgPort()))
 	{
@@ -168,6 +168,17 @@ InputEvent getInputEvent(void)
 					event = InputEvent_ToggleBlend;
 				else if (key == 'r' || key == 'R')
 					event = InputEvent_Reload;
+				break;
+			}
+			case IDCMP_MOUSEBUTTONS:
+			{
+				uint button = msg->Code & ~IECODE_UP_PREFIX;
+				uint up = msg->Code & IECODE_UP_PREFIX;
+
+				if (button == IECODE_LBUTTON && !up)
+					return InputEvent_Exit;
+				
+				break;
 			}
 		}
 
