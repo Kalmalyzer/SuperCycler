@@ -19,6 +19,9 @@ void parseErrorCallback(const char* message)
 
 static char s_ilbmName[256] = "";
 static Ilbm* s_ilbm = 0;
+static uint s_screenWidth = 0;
+static uint s_screenHeight = 0;
+static uint s_screenDepth = 0;
 
 void cleanup(void)
 {
@@ -30,6 +33,15 @@ void cleanup(void)
 
 	closeScreen();
 }
+
+void setBlackPalette(void)
+{
+	static uint32_t allBlackColors[256] = { 0 };
+
+	if (s_screenDepth)
+		setPalette(1 << s_screenDepth, allBlackColors);
+}
+	
 
 void animatePalette(Ilbm* ilbm, uint frame, bool blend)
 {
@@ -92,22 +104,34 @@ bool displayImage(const char* fileName)
 		s_ilbm = 0;
 	}
 	
-	closeScreen();
-	
 	Ilbm* ilbm = loadIffImage(fileName, parseErrorCallback);
-		
+
 	if (!ilbm)
 		return false;
 
 	s_ilbm = ilbm;
+
+	setBlackPalette();
 	
-	if (!openScreen(ilbm->width, ilbm->height, ilbm->depth))
-		return false;
+	if (ilbm->width != s_screenWidth
+		|| ilbm->height != s_screenHeight
+		|| ilbm->depth != s_screenDepth)
+	{
+		
+		closeScreen();
+		
+		if (!openScreen(ilbm->width, ilbm->height, ilbm->depth))
+			return false;
 
-	setPalette(ilbm->palette.numColors, ilbm->palette.colors);
-
+		s_screenWidth = ilbm->width;
+		s_screenHeight = ilbm->height;
+		s_screenDepth = ilbm->depth;
+	}
+		
 	copyImageToScreen(ilbm);
 	
+	setPalette(ilbm->palette.numColors, ilbm->palette.colors);
+
 	return true;
 }
 
