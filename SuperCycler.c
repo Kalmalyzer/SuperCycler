@@ -177,7 +177,15 @@ int main(int argc, char** argv)
 {
 	if (argc != 2)
 	{
-		printf("Usage: SuperCycler <filename>\n");
+		printf("Usage: SuperCycler <filename>\n\n");
+		printf("This program displays IFF images with color cycling. Up to 16 ranges are supported.\n");
+		printf("The image should ideally be in one of the native Amiga resolutions, like 320x256, and max 256 colors.\n");
+		printf("Viewer controls:\n");
+		printf("  1-9 controls color cycling delay (1 = normal DPaint speed)\n");
+		printf("  Space pauses/restarts color cycling\n");
+		printf("  R reloads the image from disk\n");
+		printf("  B toggles between linear blending, or hard stepping of colors\n");
+		printf("  Esc or LMB exits viewer\n");
 		return 0;
 	}
 
