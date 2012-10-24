@@ -1,6 +1,6 @@
 
-#ifndef PARSEILBM_H
-#define PARSEILBM_H
+#ifndef ILBM_H
+#define ILBM_H
 
 #include "Types.h"
 #include "ParseIff.h"
@@ -39,7 +39,7 @@ typedef struct
 	IlbmColorRange colorRanges[MaxIlbmColorRanges];
 } Ilbm;
 
-Ilbm* parseIlbm(const char* fileName, IffErrorFunc errorFunc);
+Ilbm* loadIffImage(const char* fileName, IffErrorFunc errorFunc);
 void freeIlbm(Ilbm* ilbm);
 
 #endif

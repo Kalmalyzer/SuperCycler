@@ -8,23 +8,24 @@ Program {
 }
 
 Program {
-	Name = "TestIlbmParser",
+	Name = "TestIffImageLoader",
 	Sources = {
 		"parseIff.c",
-		"parseIlbm.c",
-		"TestIlbmParser.c",
+		"Ilbm.c",
+		"TestIffImageLoader.c",
 	},
 }
 
 Program {
-	Name = "displayIlbm",
+	Name = "SuperCycler",
 	Sources = {
 		"parseIff.c",
-		"parseIlbm.c",
-		"displayIlbm.c",
+		"Ilbm.c",
+		"ScreenAndInput.c",
+		"SuperCycler.c",
 	},
 }
 
 Default "TestIffParser"
-Default "TestIlbmParser"
-Default "displayIlbm"
+Default "TestIffImageLoader"
+Default "SuperCycler"

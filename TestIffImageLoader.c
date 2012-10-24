@@ -1,5 +1,5 @@
 
-#include "parseIlbm.h"
+#include "Ilbm.h"
 
 #include <stdio.h>
 
@@ -16,7 +16,7 @@ int main(int argc, char** argv)
 		return 0;
 	}
 
-	Ilbm* ilbm = parseIlbm(argv[1], parseErrorCallback);
+	Ilbm* ilbm = loadIffImage(argv[1], parseErrorCallback);
 	
 	if (ilbm)
 		freeIlbm(ilbm);

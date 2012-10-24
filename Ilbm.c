@@ -1,13 +1,13 @@
 
-#include "parseIlbm.h"
+#include "Ilbm.h"
 #include "parseIff.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-//#define DEBUG_ILBM_PARSER
-//#define DEBUG_ILBM_PARSER_BITMAP_DECODE
+//#define DEBUG_IFF_IMAGE_PARSER
+//#define DEBUG_IFF_IMAGE_PARSER_BITMAP_DECODE
 
 
 typedef uint8_t Masking; 	/* Choice of masking technique. */
@@ -65,24 +65,24 @@ typedef struct
 	PixelFormat pixelFormat;
 	uint8_t* pbmRowBuffer;
 
-} ParseIlbmState;
+} LoadIffImageState;
 
-ParseIlbmState parseIlbmState;
+LoadIffImageState loadIffImageState;
 
 static uint decodeRLE(uint8_t* dest, uint8_t* src, uint destBytes)
 {
 	uint8_t* srcStart = src;
 	uint8_t* destEnd = dest + destBytes;
 
-#ifdef DEBUG_ILBM_PARSER_BITMAP_DECODE
-	printf("DEBUG_ILBM_PARSER_BITMAP_DECODE: Decoding RLE datastream: output %u bytes\n", destBytes);
+#ifdef DEBUG_IFF_IMAGE_PARSER_BITMAP_DECODE
+	printf("DEBUG_IFF_IMAGE_PARSER_BITMAP_DECODE: Decoding RLE datastream: output %u bytes\n", destBytes);
 #endif
 	
 	while (dest != destEnd)
 	{
 		int8_t count = *src++;
-#ifdef DEBUG_ILBM_PARSER_BITMAP_DECODE
-		printf("DEBUG_ILBM_PARSER_BITMAP_DECODE:  count = %d\n", count);
+#ifdef DEBUG_IFF_IMAGE_PARSER_BITMAP_DECODE
+		printf("DEBUG_IFF_IMAGE_PARSER_BITMAP_DECODE:  count = %d\n", count);
 #endif
 		if (count >= 0)
 		{
@@ -110,15 +110,15 @@ static uint skipRLE(uint8_t* src, uint destBytes)
 {
 	uint8_t* srcStart = src;
 
-#ifdef DEBUG_ILBM_PARSER_BITMAP_DECODE
-	printf("DEBUG_ILBM_PARSER_BITMAP_DECODE: Skipping RLE datastream: output %u bytes\n", destBytes);
+#ifdef DEBUG_IFF_IMAGE_PARSER_BITMAP_DECODE
+	printf("DEBUG_IFF_IMAGE_PARSER_BITMAP_DECODE: Skipping RLE datastream: output %u bytes\n", destBytes);
 #endif
 
 	while (destBytes)
 	{
 		int8_t count = *src++;
-#ifdef DEBUG_ILBM_PARSER_BITMAP_DECODE
-		printf("DEBUG_ILBM_PARSER_BITMAP_DECODE:  count = %d\n", count);
+#ifdef DEBUG_IFF_IMAGE_PARSER_BITMAP_DECODE
+		printf("DEBUG_IFF_IMAGE_PARSER_BITMAP_DECODE:  count = %d\n", count);
 #endif
 		if (count >= 0)
 		{
@@ -138,21 +138,21 @@ static uint skipRLE(uint8_t* src, uint destBytes)
 
 static bool handleILBM(void* state_, void* buffer, unsigned int size)
 {
-	ParseIlbmState* state = (ParseIlbmState*) state_;
+	LoadIffImageState* state = (LoadIffImageState*) state_;
 	state->pixelFormat = PixelFormat_Ilbm;
 	return true;
 }
 
 static bool handlePBM(void* state_, void* buffer, unsigned int size)
 {
-	ParseIlbmState* state = (ParseIlbmState*) state_;
+	LoadIffImageState* state = (LoadIffImageState*) state_;
 	state->pixelFormat = PixelFormat_Pbm;
 	return true;
 }
 
 static bool handleBMHD(void* state_, void* buffer, unsigned int size)
 {
-	ParseIlbmState* state = (ParseIlbmState*) state_;
+	LoadIffImageState* state = (LoadIffImageState*) state_;
 	if (size != sizeof BitMapHeader)
 	{
 		state->errorFunc("Invalid BMHD size");
@@ -185,9 +185,9 @@ static bool handleBMHD(void* state_, void* buffer, unsigned int size)
 
 	state->hasMaskPlane = (header->masking == mskHasMask);
 
-#ifdef DEBUG_ILBM_PARSER
-	printf("DEBUG_ILBM_PARSER: Image dimensions: %ux%u pixels, %u bits per pixel%s\n", ilbm->width, ilbm->height, ilbm->depth, (state->hasMaskPlane ? " (+ 1 mask bitplane)" : ""));
-	printf("DEBUG_ILBM_PARSER: Image compression: %s\n", state->compression ? "RLE" : "None");
+#ifdef DEBUG_IFF_IMAGE_PARSER
+	printf("DEBUG_IFF_IMAGE_PARSER: Image dimensions: %ux%u pixels, %u bits per pixel%s\n", ilbm->width, ilbm->height, ilbm->depth, (state->hasMaskPlane ? " (+ 1 mask bitplane)" : ""));
+	printf("DEBUG_IFF_IMAGE_PARSER: Image compression: %s\n", state->compression ? "RLE" : "None");
 #endif
 
 	if (ilbm->depth > MaxIlbmPlanes)
@@ -203,7 +203,7 @@ static bool handleBMHD(void* state_, void* buffer, unsigned int size)
 
 static bool handleCMAP(void* state_, void* buffer, unsigned int size)
 {
-	ParseIlbmState* state = (ParseIlbmState*) state_;
+	LoadIffImageState* state = (LoadIffImageState*) state_;
 	Ilbm* ilbm = state->ilbm;
 	
 	if (size % 3)
@@ -214,8 +214,8 @@ static bool handleCMAP(void* state_, void* buffer, unsigned int size)
 	
 	ilbm->palette.numColors = size / 3;
 	
-#ifdef DEBUG_ILBM_PARSER
-		printf("DEBUG_ILBM_PARSER: Found %u palette entries\n", ilbm->palette.numColors);
+#ifdef DEBUG_IFF_IMAGE_PARSER
+		printf("DEBUG_IFF_IMAGE_PARSER: Found %u palette entries\n", ilbm->palette.numColors);
 #endif
 
 	uint8_t* source = (uint8_t*) buffer;
@@ -230,7 +230,7 @@ static bool handleCMAP(void* state_, void* buffer, unsigned int size)
 
 static bool handleCRNG(void* state_, void* buffer, unsigned int size)
 {
-	ParseIlbmState* state = (ParseIlbmState*) state_;
+	LoadIffImageState* state = (LoadIffImageState*) state_;
 	Ilbm* ilbm = state->ilbm;
 	
 	if (size != sizeof CRange)
@@ -246,8 +246,8 @@ static bool handleCRNG(void* state_, void* buffer, unsigned int size)
 	
 	if (!(sourceRange->flags & RNG_ACTIVE))
 	{
-#ifdef DEBUG_ILBM_PARSER
-		printf("DEBUG_ILBM_PARSER: Ignoring inactive color range\n");
+#ifdef DEBUG_IFF_IMAGE_PARSER
+		printf("DEBUG_IFF_IMAGE_PARSER: Ignoring inactive color range\n");
 #endif
 		return true;
 	}
@@ -267,8 +267,8 @@ static bool handleCRNG(void* state_, void* buffer, unsigned int size)
 	destRange->rate = sourceRange->rate;
 	destRange->reverse = (sourceRange->flags & RNG_REVERSE) ? true : false;
 	
-#ifdef DEBUG_ILBM_PARSER
-	printf("DEBUG_ILBM_PARSER: Color range from %u to %u, rate %u%s\n", destRange->low, destRange->high, destRange->rate, destRange->reverse ? ", reverse" : "");
+#ifdef DEBUG_IFF_IMAGE_PARSER
+	printf("DEBUG_IFF_IMAGE_PARSER: Color range from %u to %u, rate %u%s\n", destRange->low, destRange->high, destRange->rate, destRange->reverse ? ", reverse" : "");
 #endif
 
 	ilbm->numColorRanges++;
@@ -277,7 +277,7 @@ static bool handleCRNG(void* state_, void* buffer, unsigned int size)
 
 static bool handleBODY(void* state_, void* buffer, unsigned int size)
 {
-	ParseIlbmState* state = (ParseIlbmState*) state_;
+	LoadIffImageState* state = (LoadIffImageState*) state_;
 	Ilbm* ilbm = state->ilbm;
 	uint bytesPerRow = ilbm->bytesPerRow;
 	uint bytesPerPlane = bytesPerRow * ilbm->height;
@@ -291,8 +291,8 @@ static bool handleBODY(void* state_, void* buffer, unsigned int size)
 	
 	if (state->encounteredBODY)
 	{
-#ifdef DEBUG_ILBM_PARSER
-		printf("DEBUG_ILBM_PARSER: Ignoring multiple BODYs\n");
+#ifdef DEBUG_IFF_IMAGE_PARSER
+		printf("DEBUG_IFF_IMAGE_PARSER: Ignoring multiple BODYs\n");
 #endif
 		return true;
 	}
@@ -305,8 +305,8 @@ static bool handleBODY(void* state_, void* buffer, unsigned int size)
 		return false;
 	}
 	
-#ifdef DEBUG_ILBM_PARSER
-	printf("DEBUG_ILBM_PARSER: Allocating memory for %ux%ux%u planes\n", ilbm->width, ilbm->height, ilbm->depth);
+#ifdef DEBUG_IFF_IMAGE_PARSER
+	printf("DEBUG_IFF_IMAGE_PARSER: Allocating memory for %ux%ux%u planes\n", ilbm->width, ilbm->height, ilbm->depth);
 #endif
 
 	if (!(ilbm->planes[0].data = malloc(bytesToAllocate)))
@@ -320,8 +320,8 @@ static bool handleBODY(void* state_, void* buffer, unsigned int size)
 	for (uint planeIndex = 1; planeIndex < ilbm->depth; ++planeIndex)
 		ilbm->planes[planeIndex].data = (void*) ((uint8_t*) ilbm->planes[0].data + planeIndex * bytesPerPlane);
 
-#ifdef DEBUG_ILBM_PARSER
-	printf("DEBUG_ILBM_PARSER: Decoding bitmap data\n");
+#ifdef DEBUG_IFF_IMAGE_PARSER
+	printf("DEBUG_IFF_IMAGE_PARSER: Decoding bitmap data\n");
 #endif
 
 	if (state->pixelFormat == PixelFormat_Pbm)
@@ -351,8 +351,8 @@ static bool handleBODY(void* state_, void* buffer, unsigned int size)
 					uint8_t* destPtr = (uint8_t*) ilbm->planes[plane].data + row * bytesPerRow;
 					uint8_t* destPtrEnd = destPtr + bytesPerRow;
 
-#ifdef DEBUG_ILBM_PARSER_BITMAP_DECODE
-					printf("DEBUG_ILBM_PARSER: Decoding row %u, plane %u\n", row, plane);
+#ifdef DEBUG_IFF_IMAGE_PARSER_BITMAP_DECODE
+					printf("DEBUG_IFF_IMAGE_PARSER: Decoding row %u, plane %u\n", row, plane);
 #endif
 					switch (state->compression)
 					{
@@ -371,8 +371,8 @@ static bool handleBODY(void* state_, void* buffer, unsigned int size)
 
 				if (state->hasMaskPlane)
 				{
-#ifdef DEBUG_ILBM_PARSER_BITMAP_DECODE
-					printf("DEBUG_ILBM_PARSER: Skipping over mask plane\n");
+#ifdef DEBUG_IFF_IMAGE_PARSER_BITMAP_DECODE
+					printf("DEBUG_IFF_IMAGE_PARSER: Skipping over mask plane\n");
 #endif
 					switch (state->compression)
 					{
@@ -392,8 +392,8 @@ static bool handleBODY(void* state_, void* buffer, unsigned int size)
 			}
 			case PixelFormat_Pbm:
 			{
-#ifdef DEBUG_ILBM_PARSER_BITMAP_DECODE
-				printf("DEBUG_ILBM_PARSER: Decoding row %u\n", row);
+#ifdef DEBUG_IFF_IMAGE_PARSER_BITMAP_DECODE
+				printf("DEBUG_IFF_IMAGE_PARSER: Decoding row %u\n", row);
 #endif
 				switch (state->compression)
 				{
@@ -408,8 +408,8 @@ static bool handleBODY(void* state_, void* buffer, unsigned int size)
 						state->errorFunc("Compression method not implemented");
 						return false;
 				}
-#ifdef DEBUG_ILBM_PARSER_BITMAP_DECODE
-				printf("DEBUG_ILBM_PARSER: C2P converting row %u\n", row);
+#ifdef DEBUG_IFF_IMAGE_PARSER_BITMAP_DECODE
+				printf("DEBUG_IFF_IMAGE_PARSER: C2P converting row %u\n", row);
 #endif
 				uint16_t planeData[8] = { 0 };
 				
@@ -492,13 +492,13 @@ static bool handleBODY(void* state_, void* buffer, unsigned int size)
 		return false;
 	}
 
-#ifdef DEBUG_ILBM_PARSER
-	printf("DEBUG_ILBM_PARSER: Finished decoding bitmap data\n");
+#ifdef DEBUG_IFF_IMAGE_PARSER
+	printf("DEBUG_IFF_IMAGE_PARSER: Finished decoding bitmap data\n");
 #endif
 	return true;
 }
 
-static void cleanup(ParseIlbmState* state)
+static void cleanup(LoadIffImageState* state)
 {
 	if (state->ilbm)
 		freeIlbm(state->ilbm);
@@ -507,9 +507,9 @@ static void cleanup(ParseIlbmState* state)
 		free(state->pbmRowBuffer);
 }
 
-Ilbm* parseIlbm(const char* fileName, IffErrorFunc errorFunc)
+Ilbm* loadIffImage(const char* fileName, IffErrorFunc errorFunc)
 {
-	ParseIlbmState parseIlbmState = { 0 };
+	LoadIffImageState loadIffImageState = { 0 };
 
 	IffChunkHandler chunkHandlers[] = {
 		{ ID_ILBM, handleILBM },
@@ -523,22 +523,22 @@ Ilbm* parseIlbm(const char* fileName, IffErrorFunc errorFunc)
 	IffParseRules parseRules;
 	parseRules.errorFunc = errorFunc;
 	parseRules.chunkHandlers = chunkHandlers;
-	parseRules.chunkHandlerState = &parseIlbmState;
+	parseRules.chunkHandlerState = &loadIffImageState;
 
-	parseIlbmState.errorFunc = errorFunc;
-	parseIlbmState.ilbm = malloc(sizeof Ilbm);
-	memset(parseIlbmState.ilbm, 0, sizeof Ilbm);
+	loadIffImageState.errorFunc = errorFunc;
+	loadIffImageState.ilbm = malloc(sizeof Ilbm);
+	memset(loadIffImageState.ilbm, 0, sizeof Ilbm);
 
 	if (!parseIff(fileName, &parseRules))
 	{
-		cleanup(&parseIlbmState);
+		cleanup(&loadIffImageState);
 		return 0;
 	}
 	else
 	{
-		Ilbm* ilbm = parseIlbmState.ilbm;
-		parseIlbmState.ilbm = 0;
-		cleanup(&parseIlbmState);
+		Ilbm* ilbm = loadIffImageState.ilbm;
+		loadIffImageState.ilbm = 0;
+		cleanup(&loadIffImageState);
 		return ilbm;
 	}
 }
